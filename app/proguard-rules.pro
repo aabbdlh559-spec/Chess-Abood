@@ -1,0 +1,1 @@
+-keep class com.abood.chessassistant.engine.NativeChessBridge { *; }

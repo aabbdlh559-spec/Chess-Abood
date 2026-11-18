@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layoutDirection="rtl">
+
+    <TextView
+        android:id="@+id/btnCollapsedBubble"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="#E6141B24"
+        android:gravity="center"
+        android:text="♞"
+        android:textColor="#FFD4AF37"
+        android:textSize="24sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/panelExpanded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="#E60F1419"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="8dp">
+
+        <TextView
+            android:id="@+id/dragHandle"
+            android:layout_width="24dp"
+            android:layout_height="36dp"
+            android:gravity="center"
+            android:text="⋮⋮"
+            android:textColor="#FFD4AF37"
+            android:textSize="16sp" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="6dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvFloatingBestMove"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="العدسة الذكية جاهزة"
+                android:textColor="#FF10B981"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvFloatingEval"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="افتح الرقعة للتحليل..."
+                android:textColor="#FFF8FAFC"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/tvFloatingTurn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="الدور: — | أنت: —"
+                android:textColor="#FFD4AF37"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btnAutoDetect"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="اكتشاف تلقائي للرقعة"
+            android:src="@android:drawable/ic_menu_mylocation"
+            android:tint="#FF10B981" />
+
+        <ImageButton
+            android:id="@+id/btnCalibrateBoard"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="تعديل إطار الرقعة يدوياً"
+            android:src="@android:drawable/ic_menu_crop"
+            android:tint="#FFD4AF37" />
+
+        <ImageButton
+            android:id="@+id/btnLearnPieces"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="تعلّم القطع من وضع البداية"
+            android:src="@android:drawable/ic_menu_camera"
+            android:tint="#FFF8FAFC" />
+
+        <ImageButton
+            android:id="@+id/btnPauseResume"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="إيقاف مؤقت أو استئناف"
+            android:src="@android:drawable/ic_media_pause"
+            android:tint="#FFF8FAFC" />
+
+        <ImageButton
+            android:id="@+id/btnToggleArrows"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="إخفاء أو إظهار الأسهم"
+            android:src="@android:drawable/ic_menu_view"
+            android:tint="#FF10B981" />
+
+        <ImageButton
+            android:id="@+id/btnMinimize"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="تصغير"
+            android:src="@android:drawable/arrow_down_float"
+            android:tint="#FF94A3B8" />
+
+        <ImageButton
+            android:id="@+id/btnCloseAssistant"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="إغلاق"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:tint="#FFEF4444" />
+    </LinearLayout>
+</FrameLayout>
