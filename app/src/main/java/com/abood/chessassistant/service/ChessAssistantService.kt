@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.SystemClock
 import android.os.IBinder
 import android.util.DisplayMetrics
 import android.view.WindowManager
@@ -39,6 +40,7 @@ class ChessAssistantService : Service() {
     private var pendingCandidateFen: String = ""
     private var lastAnalyzedFen: String = ""
     private var autoDetectedOnce: Boolean = false
+    private var lastAutoDetectAtMs: Long = 0L
     private var screenW = 1080
     private var screenH = 2400
 
@@ -134,18 +136,30 @@ class ChessAssistantService : Service() {
                 if (!current.isPaused) {
                     val frame = withContext(Dispatchers.Default) { captureManager.captureFrame() }
                     if (frame != null) {
-                        // اكتشاف الرقعة تلقائياً عند أول إطار ناجح إذا لم يقم المستخدم بضبطها يدوياً
-                        if (!autoDetectedOnce && !settings.hasUserCalibrated) {
-                            val detected = withContext(Dispatchers.Default) { recognizer.autoDetectBoardRect(frame) }
+                        // Retry automatic detection periodically, not on every frame.
+                        if (!autoDetectedOnce && !settings.hasUserCalibrated &&
+                            SystemClock.elapsedRealtime() - lastAutoDetectAtMs >= 1800L
+                        ) {
+                            lastAutoDetectAtMs = SystemClock.elapsedRealtime()
+                            val detected = withContext(Dispatchers.Default) {
+                                recognizer.autoDetectBoardRect(frame)
+                            }
                             if (detected != null) {
                                 settings.boardRectRatio = detected
                                 autoDetectedOnce = true
+                                recognizer.resetTracking()
                             }
                         }
 
-                        val rectPx = settings.boardRectRatio.toPixelRect(screenW, screenH)
-                        val rec = withContext(Dispatchers.Default) {
-                            recognizer.recognize(frame, rectPx)
+                        // Never interpret the default screen rectangle as a chessboard.
+                        val hasBoardRect = autoDetectedOnce || settings.hasUserCalibrated
+                        val rec = if (hasBoardRect) {
+                            val rectPx = settings.boardRectRatio.toPixelRect(screenW, screenH)
+                            withContext(Dispatchers.Default) {
+                                recognizer.recognize(frame, rectPx)
+                            }
+                        } else {
+                            null
                         }
                         frame.recycle()
 
@@ -178,9 +192,12 @@ class ChessAssistantService : Service() {
                                 )
                             }
                         } else {
-                            // إعادة محاولة الاكتشاف التلقائي إذا لم نجد الرقعة بعد
-                            if (!settings.hasUserCalibrated) autoDetectedOnce = false
-                            updateState(_state.value.copy(statusText = "وجّه العدسة نحو رقعة الشطرنج"))
+                            val message = if (hasBoardRect) {
+                                "تم تحديد إطار الرقعة؛ قرّب الرقعة ووضّح القطع"
+                            } else {
+                                "ابحث عن رقعة شطرنج على الشاشة..."
+                            }
+                            updateState(_state.value.copy(statusText = message))
                         }
                     }
                 }
