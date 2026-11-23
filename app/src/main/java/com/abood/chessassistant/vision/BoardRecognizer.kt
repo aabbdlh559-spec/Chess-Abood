@@ -265,67 +265,8 @@ class BoardRecognizer(
             }
         }
 
-        // 3. محاولة مطابقة الرقعة مع نقلة قانونية (1 نقلة أو نقلتين) من الحالة السابقة المؤكدة!
-        val prevFen = trackedFen
-        if (prevFen != null) {
-            // هل الوضع مطابق تماماً للحالة السابقة؟
-            val prevGrid = trackedGrid
-            if (prevGrid != null && gridMatchesColors(prevGrid, observedColorMap)) {
-                val turn = resolveTurn(trackedWhiteToMove, boardData, flipped)
-                val fen = rebuildFenTurn(prevFen, turn)
-                return RecognitionResult(
-                    fen = fen,
-                    boardGrid = prevGrid,
-                    isFlipped = flipped,
-                    whiteToMove = turn,
-                    occupiedCount = boardData.occupiedCount,
-                    confidencePercent = 98,
-                    trackingModeLabel = "تتبع ذكي مستقر"
-                )
-            }
-
-            // البحث عن نقلة قانونية واحدة تطابق اللون ومواقع القطع الجديدة
-            val transitions1 = chessEngine.generateLegalTransitions(prevFen)
-            val match1 = transitions1.firstOrNull { gridMatchesColors(it.resultingGrid, observedColorMap) }
-            if (match1 != null) {
-                val turn = resolveTurn(match1.nextWhiteToMove, boardData, flipped)
-                val finalFen = rebuildFenTurn(match1.resultingFen, turn)
-                trackedFen = finalFen
-                trackedGrid = match1.resultingGrid
-                trackedWhiteToMove = turn
-                return RecognitionResult(
-                    fen = finalFen,
-                    boardGrid = match1.resultingGrid,
-                    isFlipped = flipped,
-                    whiteToMove = turn,
-                    occupiedCount = boardData.occupiedCount,
-                    confidencePercent = 97,
-                    trackingModeLabel = "تتبع نقلة: ${match1.uciMove}"
-                )
-            }
-
-            // البحث على مستوى نقلتين (في حال لعب الخصم وردّ اللاعب بسرعة)
-            for (t1 in transitions1) {
-                val transitions2 = chessEngine.generateLegalTransitions(t1.resultingFen)
-                val match2 = transitions2.firstOrNull { gridMatchesColors(it.resultingGrid, observedColorMap) }
-                if (match2 != null) {
-                    val turn = resolveTurn(match2.nextWhiteToMove, boardData, flipped)
-                    val finalFen = rebuildFenTurn(match2.resultingFen, turn)
-                    trackedFen = finalFen
-                    trackedGrid = match2.resultingGrid
-                    trackedWhiteToMove = turn
-                    return RecognitionResult(
-                        fen = finalFen,
-                        boardGrid = match2.resultingGrid,
-                        isFlipped = flipped,
-                        whiteToMove = turn,
-                        occupiedCount = boardData.occupiedCount,
-                        confidencePercent = 94,
-                        trackingModeLabel = "تتبع نقلتين"
-                    )
-                }
-            }
-        }
+        // لا نستنتج نوع القطعة أو النقلة من اللون والإشغال فقط؛ ذلك كان
+        // يطابق نقلات خاطئة عندما تتبادل القطع من اللون نفسه مواقعها.
 
         // 4. القراءة البصرية المباشرة لمنتصف الدور + تصحيح القواعد القانونية للشطرنج
         val rawGrid = Array(8) { CharArray(8) { '.' } }
@@ -344,19 +285,13 @@ class BoardRecognizer(
             }
         }
 
-        sanitizeChessLegality(rawGrid)
-
         val fallbackTurn = resolveTurn(!flipped, boardData, flipped)
         var finalFen = buildFenFromGrid(rawGrid, fallbackTurn)
 
-        // التحقق من أن FEN الناتج قانوني قبل إرساله للمحرك
+        // لا نغيّر نوع القطع لتجميل الوضعية. إذا كانت القراءة غير قانونية
+        // نرفضها وننتظر لقطة أوضح بدلاً من اختراع ملك/وزير أو تبديل قطعة.
         if (!chessEngine.isPositionValid(finalFen)) {
-            val toggledFen = buildFenFromGrid(rawGrid, !fallbackTurn)
-            if (chessEngine.isPositionValid(toggledFen)) {
-                finalFen = toggledFen
-            } else {
-                return null
-            }
+            return null
         }
 
         val actualTurn = finalFen.split(" ").getOrElse(1) { "w" } == "w"
@@ -413,50 +348,6 @@ class BoardRecognizer(
             }
         }
         return true
-    }
-
-    private fun sanitizeChessLegality(grid: Array<CharArray>) {
-        // 1. منع وجود بيادق في الصف الأول أو الثامن
-        for (c in 0..7) {
-            if (grid[0][c] == 'P') grid[0][c] = 'Q'
-            if (grid[0][c] == 'p') grid[0][c] = 'q'
-            if (grid[7][c] == 'P') grid[7][c] = 'Q'
-            if (grid[7][c] == 'p') grid[7][c] = 'q'
-        }
-
-        // 2. ضمان وجود ملك واحد بالضبط لكل لون
-        for (isWhite in listOf(true, false)) {
-            val kingChar = if (isWhite) 'K' else 'k'
-            val queenChar = if (isWhite) 'Q' else 'q'
-            val kings = mutableListOf<Pair<Int, Int>>()
-            for (r in 0..7) {
-                for (c in 0..7) {
-                    if (grid[r][c] == kingChar) kings.add(r to c)
-                }
-            }
-            if (kings.size > 1) {
-                val homeR = if (isWhite) 7 else 0
-                val best = kings.minByOrNull { (r, c) -> abs(r - homeR) * 2 + abs(c - 4) }!!
-                for (pos in kings) {
-                    if (pos != best) grid[pos.first][pos.second] = queenChar
-                }
-            } else if (kings.isEmpty()) {
-                val homeR = if (isWhite) 7 else 0
-                val candidates = mutableListOf<Pair<Int, Int>>()
-                for (r in 0..7) {
-                    for (c in 0..7) {
-                        val ch = grid[r][c]
-                        if (ch != '.' && ch.isUpperCase() == isWhite && ch.lowercaseChar() != 'p') {
-                            candidates.add(r to c)
-                        }
-                    }
-                }
-                val chosen = candidates.minByOrNull { (r, c) -> abs(r - homeR) * 2 + abs(c - 4) }
-                if (chosen != null) {
-                    grid[chosen.first][chosen.second] = kingChar
-                }
-            }
-        }
     }
 
     private fun classifyPieceWithConfidence(sq: SquareFeature): Pair<Char, Float> {
