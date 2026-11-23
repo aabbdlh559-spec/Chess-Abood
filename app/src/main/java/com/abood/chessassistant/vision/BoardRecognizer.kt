@@ -41,14 +41,16 @@ class BoardRecognizer(
         val sh = fullScreen.height
         if (sw < 200 || sh < 300) return null
 
-        // تصغير سريع إلى عرض 360px لتحليل الحواف في أقل من 15 مللي ثانية
-        val scale = 360f / sw
+        // Work on a small copy so the scan stays fast on mid-range phones.
         val w = 360
-        val h = (sh * scale).toInt().coerceAtLeast(200)
+        val h = (sh * (w.toFloat() / sw)).toInt().coerceAtLeast(200)
         val small = Bitmap.createScaledBitmap(fullScreen, w, h, true)
         val px = IntArray(w * h)
-        small.getPixels(px, 0, w, 0, 0, w, h)
-        small.recycle()
+        try {
+            small.getPixels(px, 0, w, 0, 0, w, h)
+        } finally {
+            small.recycle()
+        }
 
         fun colorDiff(c1: Int, c2: Int): Float {
             val dr = ((c1 shr 16) and 0xFF) - ((c2 shr 16) and 0xFF)
@@ -58,14 +60,24 @@ class BoardRecognizer(
         }
 
         val rowEdge = FloatArray(h)
-        val xStart = (w * 0.14f).toInt()
-        val xEnd = (w * 0.86f).toInt()
+        val xStart = (w * 0.12f).toInt()
+        val xEnd = (w * 0.88f).toInt()
         for (y in 1 until h - 1) {
             var sum = 0f
             for (x in xStart until xEnd) {
                 sum += colorDiff(px[(y - 1) * w + x], px[(y + 1) * w + x])
             }
-            rowEdge[y] = sum / (xEnd - xStart)
+            rowEdge[y] = sum / (xEnd - xStart).coerceAtLeast(1)
+        }
+
+        // Prefix sums avoid rescanning hundreds of rows for every candidate rectangle.
+        val verticalPrefix = Array(w) { FloatArray(h + 1) }
+        for (x in 1 until w - 1) {
+            val prefix = verticalPrefix[x]
+            for (y in 1 until h - 1) {
+                prefix[y + 1] = prefix[y] +
+                    colorDiff(px[y * w + (x - 1)], px[y * w + (x + 1)])
+            }
         }
 
         val colEdge = FloatArray(w)
@@ -73,40 +85,37 @@ class BoardRecognizer(
         var bestX0 = 0
         var bestY0 = 0
         var bestSize = 0
-
-        val minSize = (w * 0.68f).toInt()
+        val minSize = (w * 0.62f).toInt()
         val maxSize = (w * 0.99f).toInt()
+        val yMin = (h * 0.06f).toInt()
 
         for (size in minSize..maxSize step 3) {
-            val sq = size / 8f
-            val yMin = (h * 0.08f).toInt()
-            val yMax = (h - size - h * 0.06f).toInt()
+            if (size >= h) continue
+            val squareStep = size / 8f
+            val yMax = (h - size - h * 0.04f).toInt()
+            if (yMax < yMin) continue
+
             for (y0 in yMin..yMax step 3) {
                 var yScore = 0f
                 for (i in 0..8) {
-                    val ly = (y0 + i * sq).roundToInt().coerceIn(1, h - 2)
-                    val peak = max(rowEdge[ly], max(rowEdge[ly - 1], rowEdge[ly + 1]))
-                    yScore += peak
+                    val ly = (y0 + i * squareStep).roundToInt().coerceIn(1, h - 2)
+                    yScore += max(rowEdge[ly], max(rowEdge[ly - 1], rowEdge[ly + 1]))
                 }
-                if (yScore < 160f) continue
+                if (yScore < 120f) continue
 
-                // حساب الحواف الأفقية ضمن نطاق هذا الارتفاع المرشح
-                val yMidStart = (y0 + sq * 0.25f).toInt().coerceIn(0, h - 1)
-                val yMidEnd = (y0 + size - sq * 0.25f).toInt().coerceIn(yMidStart + 1, h)
+                val yMidStart = (y0 + squareStep * 0.20f).toInt().coerceIn(0, h - 1)
+                val yMidEnd = (y0 + size - squareStep * 0.20f).toInt().coerceIn(yMidStart + 1, h)
+                val sampleCount = (yMidEnd - yMidStart).coerceAtLeast(1).toFloat()
                 for (x in 1 until w - 1) {
-                    var sum = 0f
-                    for (y in yMidStart until yMidEnd step 2) {
-                        sum += colorDiff(px[y * w + (x - 1)], px[y * w + (x + 1)])
-                    }
-                    colEdge[x] = sum / max(1, (yMidEnd - yMidStart) / 2)
+                    val prefix = verticalPrefix[x]
+                    colEdge[x] = (prefix[yMidEnd] - prefix[yMidStart]) / sampleCount
                 }
 
                 for (x0 in 0..(w - size) step 2) {
                     var xScore = 0f
                     for (i in 0..8) {
-                        val lx = (x0 + i * sq).roundToInt().coerceIn(1, w - 2)
-                        val peak = max(colEdge[lx], max(colEdge[lx - 1], colEdge[lx + 1]))
-                        xScore += peak
+                        val lx = (x0 + i * squareStep).roundToInt().coerceIn(1, w - 2)
+                        xScore += max(colEdge[lx], max(colEdge[lx - 1], colEdge[lx + 1]))
                     }
                     val total = yScore + xScore
                     if (total > bestScore) {
@@ -119,7 +128,7 @@ class BoardRecognizer(
             }
         }
 
-        if (bestSize < minSize || bestScore < 340f) return null
+        if (bestSize < minSize || bestScore < 300f) return null
         return BoardRectRatio(
             left = (bestX0.toFloat() / w).coerceIn(0f, 0.9f),
             top = (bestY0.toFloat() / h).coerceIn(0f, 0.9f),
