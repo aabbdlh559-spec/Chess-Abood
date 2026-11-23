@@ -23,6 +23,18 @@ class BoardArrowOverlayView(context: Context) : View(context) {
         strokeWidth = 3f
     }
 
+    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#88D4AF37")
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+    }
+
+    private val coordinatePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textAlign = Paint.Align.LEFT
+        setShadowLayer(3f, 1f, 1f, Color.BLACK)
+    }
+
     private val bestArrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#E610B981")
         style = Paint.Style.FILL
@@ -75,13 +87,31 @@ class BoardArrowOverlayView(context: Context) : View(context) {
         super.onDraw(canvas)
         if (boardRect.width() < 40f || boardRect.height() < 40f) return
 
+        val sqW = boardRect.width() / 8f
+        val sqH = boardRect.height() / 8f
+
         if (showBoardOutline) {
             canvas.drawRect(boardRect, boardOutlinePaint)
+            for (line in 1..7) {
+                val x = boardRect.left + line * sqW
+                val y = boardRect.top + line * sqH
+                canvas.drawLine(x, boardRect.top, x, boardRect.bottom, gridPaint)
+                canvas.drawLine(boardRect.left, y, boardRect.right, y, gridPaint)
+            }
+
+            // Label files and ranks so detected squares can be identified at a glance.
+            coordinatePaint.textSize = (minOf(sqW, sqH) * 0.14f).coerceIn(10f, 22f)
+            for (index in 0..7) {
+                val file = if (isFlipped) "hgfedcba"[index] else "abcdefgh"[index]
+                val rank = if (isFlipped) index + 1 else 8 - index
+                val x = boardRect.left + index * sqW + 4f
+                val y = boardRect.top + index * sqH + coordinatePaint.textSize + 2f
+                canvas.drawText(rank.toString(), boardRect.left + 4f, y, coordinatePaint)
+                canvas.drawText(file.toString(), x, boardRect.bottom - 4f, coordinatePaint)
+            }
         }
 
         val current = analysis ?: return
-        val sqW = boardRect.width() / 8f
-        val sqH = boardRect.height() / 8f
 
         if (showArrow && current.bestMoveUci.length >= 4 && current.bestMoveUci != "0000") {
             if (current.ponderMoveUci.length >= 4 && current.ponderMoveUci != "0000") {
