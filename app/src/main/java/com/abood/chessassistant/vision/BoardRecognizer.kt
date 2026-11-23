@@ -278,7 +278,10 @@ class BoardRecognizer(
                 val srcR = if (flipped) 7 - r else r
                 val srcC = if (flipped) 7 - c else c
                 val item = boardData.squares[srcR][srcC] ?: continue
-                val (ch, conf) = classifyPieceWithConfidence(item)
+                // لا نضع نوع قطعة بالتخمين: إذا كانت المطابقة ضعيفة أو ملتبسة
+                // نرفض اللقطة كاملة حتى لا ينتج عنها تحليل مبني على قطعة خاطئة.
+                val classification = classifyPieceWithConfidence(item) ?: return null
+                val (ch, conf) = classification
                 rawGrid[r][c] = ch
                 totalConf += conf
                 countPieces++
@@ -350,38 +353,34 @@ class BoardRecognizer(
         return true
     }
 
-    private fun classifyPieceWithConfidence(sq: SquareFeature): Pair<Char, Float> {
+    private fun classifyPieceWithConfidence(sq: SquareFeature): Pair<Char, Float>? {
         val candidates = learnedTemplates.filterKeys { it.isUpperCase() == sq.isWhite }
-        if (candidates.size >= 6) {
-            var bestChar = if (sq.isWhite) 'P' else 'p'
-            var bestScore = -1f
-            for ((ch, tmpl) in candidates) {
-                var dot = 0f
-                for (i in 0 until 576) dot += sq.templateVec[i] * tmpl[i]
-                if (dot > bestScore) {
-                    bestScore = dot
-                    bestChar = ch
-                }
+        // نحتاج قوالب الأنواع الستة للون نفسه. التخمين الهندسي القديم كان
+        // يحوّل أي شكل غير معروف إلى قطعة (غالباً فيلاً)، حتى عندما تكون الصورة رديئة.
+        if (candidates.size < 6) return null
+
+        var bestChar: Char? = null
+        var bestScore = Float.NEGATIVE_INFINITY
+        var secondBestScore = Float.NEGATIVE_INFINITY
+
+        for ((ch, tmpl) in candidates) {
+            var dot = 0f
+            for (i in 0 until min(576, min(sq.templateVec.size, tmpl.size))) {
+                dot += sq.templateVec[i] * tmpl[i]
             }
-            return bestChar to bestScore.coerceIn(0.6f, 0.99f)
+            if (dot > bestScore) {
+                secondBestScore = bestScore
+                bestScore = dot
+                bestChar = ch
+            } else if (dot > secondBestScore) {
+                secondBestScore = dot
+            }
         }
 
-        val fill = sq.fillRatio
-        val height = sq.heightRatio
-        val asym = sq.asymX
-        val topW = sq.topWidth
-        val midW = sq.midWidth
-
-        val base = when {
-            asym > 0.055f && topW > 0.40f -> 'n'
-            fill < 0.25f && height < 0.74f -> 'p'
-            topW > 0.72f && abs(topW - midW) < 0.24f -> 'r'
-            height > 0.76f && topW < 0.52f -> 'k'
-            topW > 0.58f -> 'q'
-            else -> 'b'
-        }
-        val finalCh = if (sq.isWhite) base.uppercaseChar() else base
-        return finalCh to 0.80f
+        val margin = bestScore - secondBestScore
+        // لا نُخرج نتيجة إلا إذا كانت المطابقة معقولة والفارق عن أقرب بديل واضحاً.
+        if (bestChar == null || bestScore < 0.45f || margin < 0.025f) return null
+        return bestChar to bestScore.coerceIn(0f, 0.99f)
     }
 
     private data class SquareFeature(
